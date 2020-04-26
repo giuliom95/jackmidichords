@@ -14,7 +14,6 @@
 #define MIDI_STATUS_NOTEON	0b1001
 #define MIDI_STATUS_NOTEOFF	0b1000
 
-
 jack_port_t *midi_in_port;
 jack_port_t *midi_out_port;
 
@@ -27,22 +26,22 @@ int process(jack_nframes_t nframes, void *data) {
 	midi_out	= jack_port_get_buffer(midi_out_port,	nframes);
 	jack_midi_clear_buffer(midi_out);
 
-	jack_midi_event_t in_event;
+	jack_midi_event_t event;
 	jack_nframes_t event_count = jack_midi_get_event_count(midi_in);
 	for(int i = 0; i < event_count; ++i) {
-		jack_midi_event_get(&in_event, midi_in, i);
+		jack_midi_event_get(&event, midi_in, i);
 
-		jack_midi_data_t sta = in_event.buffer[0];
+		jack_midi_data_t sta = event.buffer[0];
 		if(sta >> 4 == MIDI_STATUS_NOTEON || sta >> 4 == MIDI_STATUS_NOTEOFF) {
-			jack_midi_data_t key = in_event.buffer[1];
-			jack_midi_data_t val = in_event.buffer[2];
+			jack_midi_data_t key = event.buffer[1];
+			jack_midi_data_t val = event.buffer[2];
 
-			printf("Note event. %x, Time: %d, Key: %d, Value: %d\n", sta, in_event.time, key, val);
+			printf("Note event. %x, Time: %d, Key: %d, Value: %d\n", sta, event.time, key, val);
 
-			// Pass through
-			jack_midi_data_t* buf = jack_midi_event_reserve(midi_out, in_event.time, 3);
-
-			memcpy(buf, in_event.buffer, 3);
+			event.buffer[1] += 4;
+			jack_midi_event_write(midi_out, event.time, event.buffer, 3);
+			event.buffer[1] += 3;
+			jack_midi_event_write(midi_out, event.time, event.buffer, 3);
 		}
 	}
 
