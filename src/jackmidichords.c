@@ -17,6 +17,14 @@
 jack_port_t *midi_in_port;
 jack_port_t *midi_out_port;
 
+char play_major = 0;
+char play_minor = 0;
+
+typedef char chord_deltas_t[];
+
+chord_deltas_t major_deltas = {4, 3, 0, 0};
+chord_deltas_t minor_deltas = {3, 4, 0, 0};
+
 int process(jack_nframes_t nframes, void *data) {
 
 	void *midi_in;
@@ -32,16 +40,37 @@ int process(jack_nframes_t nframes, void *data) {
 		jack_midi_event_get(&event, midi_in, i);
 
 		jack_midi_data_t sta = event.buffer[0];
+
 		if(sta >> 4 == MIDI_STATUS_NOTEON || sta >> 4 == MIDI_STATUS_NOTEOFF) {
-			jack_midi_data_t key = event.buffer[1];
-			jack_midi_data_t val = event.buffer[2];
-
-			printf("Note event. %x, Time: %d, Key: %d, Value: %d\n", sta, event.time, key, val);
-
-			event.buffer[1] += 4;
+			
 			jack_midi_event_write(midi_out, event.time, event.buffer, 3);
-			event.buffer[1] += 3;
-			jack_midi_event_write(midi_out, event.time, event.buffer, 3);
+
+			chord_deltas_t* deltas = NULL;
+			if(play_major) deltas = &major_deltas;
+			if(play_minor) deltas = &minor_deltas;
+			if(!deltas) continue;
+
+			for(int i = 0; i < 4; ++i)
+			{
+				char d = (*deltas)[i];
+				if(!d) break;
+				event.buffer[1] += d;
+				jack_midi_event_write(midi_out, event.time, event.buffer, 3);
+			}
+
+		}
+
+		if(sta >> 4 == MIDI_STATUS_CC) {
+			switch(event.buffer[1]) {
+
+				case 1:
+					play_major = event.buffer[2];
+					break;
+
+				case 2:
+					play_minor = event.buffer[2];
+					break;
+			}
 		}
 	}
 
