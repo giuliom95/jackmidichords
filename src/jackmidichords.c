@@ -25,17 +25,24 @@ int process(jack_nframes_t nframes, void *data) {
 	
 	midi_in		= jack_port_get_buffer(midi_in_port,	nframes);
 	midi_out	= jack_port_get_buffer(midi_out_port,	nframes);
+	jack_midi_clear_buffer(midi_out);
 
 	jack_midi_event_t in_event;
 	jack_nframes_t event_count = jack_midi_get_event_count(midi_in);
 	for(int i = 0; i < event_count; ++i) {
 		jack_midi_event_get(&in_event, midi_in, i);
-		jack_midi_data_t status = in_event.buffer[0];
-		if(status >> 4 == MIDI_STATUS_NOTEON) {
-			jack_midi_data_t ctrl_key = in_event.buffer[1];
-			jack_midi_data_t ctrl_val = in_event.buffer[2];
 
+		jack_midi_data_t sta = in_event.buffer[0];
+		if(sta >> 4 == MIDI_STATUS_NOTEON || sta >> 4 == MIDI_STATUS_NOTEOFF) {
+			jack_midi_data_t key = in_event.buffer[1];
+			jack_midi_data_t val = in_event.buffer[2];
 
+			printf("Note event. %x, Time: %d, Key: %d, Value: %d\n", sta, in_event.time, key, val);
+
+			// Pass through
+			jack_midi_data_t* buf = jack_midi_event_reserve(midi_out, in_event.time, 3);
+
+			memcpy(buf, in_event.buffer, 3);
 		}
 	}
 
@@ -52,9 +59,9 @@ int main(int argc, char *argv[])
 {
 	jack_client_t *client;
 
-			char *client_name = "jackmidichords";
-	const	char *server_name = NULL;
-	
+	const char *client_name = "jackmidichords";
+	const char *server_name = NULL;
+
 	jack_options_t options = JackNoStartServer;
 	jack_status_t status;
 
@@ -72,9 +79,8 @@ int main(int argc, char *argv[])
 
 	if(status & JackNameNotUnique) 
 	{
-		char *actual_client_name = jack_get_client_name(client);
+		const char *actual_client_name = jack_get_client_name(client);
 		fprintf(stderr, "Unique name `%s' assigned\n", actual_client_name);
-		strcpy(client_name, actual_client_name);
 	}
 
 	midi_in_port = jack_port_register(
