@@ -9,6 +9,7 @@
 #include <jack/jack.h>
 #include <jack/midiport.h>
 
+#include "chords.h"
 
 #define MIDI_STATUS_CC		0b1011
 #define MIDI_STATUS_NOTEON	0b1001
@@ -19,11 +20,6 @@ jack_port_t *midi_out_port;
 
 char play_major = 0;
 char play_minor = 0;
-
-typedef char chord_deltas_t[];
-
-chord_deltas_t major_deltas = {4, 3, 0, 0};
-chord_deltas_t minor_deltas = {3, 4, 0, 0};
 
 int process(jack_nframes_t nframes, void *data) {
 
@@ -45,17 +41,13 @@ int process(jack_nframes_t nframes, void *data) {
 			
 			jack_midi_event_write(midi_out, event.time, event.buffer, 3);
 
-			chord_deltas_t* deltas = NULL;
-			if(play_major) deltas = &major_deltas;
-			if(play_minor) deltas = &minor_deltas;
-			if(!deltas) continue;
-
-			for(int i = 0; i < 4; ++i)
-			{
-				char d = (*deltas)[i];
-				if(!d) break;
-				event.buffer[1] += d;
-				jack_midi_event_write(midi_out, event.time, event.buffer, 3);
+			if(play_major) {
+				chord_t c;
+				c.key		= event.buffer[1];
+				c.velocity	= event.buffer[2];
+				c.type		= MAJOR;
+				jack_midi_data_t* buf = jack_midi_event_reserve(midi_out, event.time, 12);
+				chord_midify(buf, c, event.buffer[0]);
 			}
 
 		}

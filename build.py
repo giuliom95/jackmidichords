@@ -1,6 +1,7 @@
 import subprocess
 
 SRCS = [
+    'src/chords.c',
     'src/jackmidichords.c'
 ]
 
