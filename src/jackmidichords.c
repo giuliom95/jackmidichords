@@ -18,8 +18,7 @@
 jack_port_t *midi_in_port;
 jack_port_t *midi_out_port;
 
-char play_major = 0;
-char play_minor = 0;
+chord_type_t active_chord_type = NONE;
 
 int process(jack_nframes_t nframes, void *data) {
 
@@ -34,35 +33,45 @@ int process(jack_nframes_t nframes, void *data) {
 	jack_nframes_t event_count = jack_midi_get_event_count(midi_in);
 	for(int i = 0; i < event_count; ++i) {
 		jack_midi_event_get(&event, midi_in, i);
+		// Pass through the event
+		jack_midi_event_write(midi_out, event.time, event.buffer, event.size);
 
 		jack_midi_data_t sta = event.buffer[0];
 
-		if(sta >> 4 == MIDI_STATUS_NOTEON || sta >> 4 == MIDI_STATUS_NOTEOFF) {
-			
-			jack_midi_event_write(midi_out, event.time, event.buffer, 3);
+		// If note on or off
+		if((sta & 0b01100000) == 0) {
+			char key = event.buffer[1];
+			everykey[key].velocity = event.buffer[2];
 
-			if(play_major) {
-				chord_t c;
-				c.key		= event.buffer[1];
-				c.velocity	= event.buffer[2];
-				c.type		= MAJOR;
-				jack_midi_data_t* buf = jack_midi_event_reserve(midi_out, event.time, 12);
-				chord_midify(buf, c, event.buffer[0]);
+			if(sta >> 4 == MIDI_STATUS_NOTEON) {
+				if(active_chord_type != NONE) {
+					everykey[key].type = active_chord_type;
+				}
 			}
 
+			jack_midi_data_t* buf = jack_midi_event_reserve(midi_out, event.time, 12);
+			chord_midify(buf, key, event.buffer[0]);
+
+			if(sta >> 4 == MIDI_STATUS_NOTEOFF) {
+				everykey[key].type = NONE;
+			}
 		}
 
 		if(sta >> 4 == MIDI_STATUS_CC) {
-			switch(event.buffer[1]) {
+			if(event.buffer[2]) {
+				switch(event.buffer[1]) {
+					case 1:
+						active_chord_type = MAJOR;
+						break;
 
-				case 1:
-					play_major = event.buffer[2];
-					break;
-
-				case 2:
-					play_minor = event.buffer[2];
-					break;
+					case 2:
+						active_chord_type = MINOR;
+						break;
+				}
+			} else {
+				active_chord_type = NONE;
 			}
+
 		}
 	}
 
@@ -77,6 +86,8 @@ void jack_shutdown(void *arg)
 
 int main(int argc, char *argv[])
 {
+	populate_everykey();
+
 	jack_client_t *client;
 
 	const char *client_name = "jackmidichords";
